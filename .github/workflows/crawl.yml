@@ -2,7 +2,7 @@ name: event-crawl
 
 on:
   schedule:
-    # UTC 22:00 = KST 07:00 (평일)
+    # UTC 22:00 = KST 07:00 (월~금)
     - cron: '0 22 * * 0-4'
   workflow_dispatch:
 
@@ -67,7 +67,7 @@ jobs:
           username: cslewis04@gmail.com
           password: ${{ secrets.GMAIL_APP_PASSWORD }}
           subject: 경쟁사 이벤트 크롤링 ${{ github.run_number }}
-          to: 112247@koreainvestment.com, cslewis04@gmail.com
+          to: 111715@koreainvestment.com, 112247@koreainvestment.com
           from: cslewis04@gmail.com
           body: file:///tmp/mail_body.txt
           attachments: ${{ steps.attach.outputs.list }}
