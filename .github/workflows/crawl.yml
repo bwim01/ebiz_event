@@ -34,7 +34,8 @@ jobs:
         run: |
           mkdir -p output
           cp data/events.db output/events.db
-          python seed_db.py "data/경쟁사 이벤트_20260609.xlsx" --as-yesterday
+          python seed_db.py data/baseline.xlsx --as-yesterday
+          python -c "import event_db; d=event_db.load_compare_baseline(); print('compare baseline rows:', len(d))"
 
       - name: Run crawl
         id: crawl

@@ -153,21 +153,21 @@ def crawl_all(page):
         stats[name] = '오류'
         errors[name] = str(e)
 
-    # 삼성 (사이트 개편: content frame → event.do, 메뉴 경유 필요)
+    # 삼성 (content frame → 메뉴 클릭, hover 없이 진행)
     name = '삼성증권'
     try:
-        page.goto('https://www.samsungpop.com/', wait_until='networkidle', timeout=90000)
+        page.goto('https://www.samsungpop.com/', wait_until='domcontentloaded', timeout=90000)
         frame = page.frame(name='content')
         if frame is None:
             raise RuntimeError('content frame not found')
-        frame.locator('#nav div:nth-child(1) div:nth-child(2) ul li:nth-child(7) a').first.click(timeout=20000)
+        frame.locator('#nav div:nth-child(1) div:nth-child(2) ul li:nth-child(7) a').first.click(timeout=30000)
         page.wait_for_timeout(2000)
-        frame.locator('#dl_megamenu_M1231757747515 dd:nth-child(2) a').hover()
-        page.wait_for_timeout(800)
-        frame.locator('#dl_megamenu_M1231757747515 dd:nth-child(3) a').click(timeout=20000)
+        frame.locator('#dl_megamenu_M1231757747515 dd:nth-child(3) a').first.click(timeout=30000)
         page.wait_for_timeout(4000)
         frame = page.frame(name='content')
-        frame.wait_for_selector('#bodyList1 li', timeout=30000)
+        if frame is None:
+            raise RuntimeError('content frame lost after menu click')
+        frame.wait_for_selector('#bodyList1 li', timeout=45000)
         table = frame.locator('#bodyList1').inner_text().split('자세히보기')
         num = len(table) - 1
         for i in range(num):

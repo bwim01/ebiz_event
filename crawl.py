@@ -97,8 +97,11 @@ def run_crawl():
 
 
 def build_outputs(rows_all):
-    today = datetime.today().strftime('%Y%m%d')
-    data_all = event_db.load_yesterday()
+    today = datetime.now(event_db.KST).strftime('%Y%m%d')
+    data_all = event_db.load_compare_baseline()
+    print(f'[비교] 오늘 수집 {len(rows_all)}건 / 기준 {len(data_all)}건')
+    if data_all.empty:
+        print('[비교] 경고: 기준 데이터 없음 → 전부 신규(빨간색) 처리됨')
 
     wb = Workbook()
     for j, corp in enumerate(CORP):
@@ -116,16 +119,20 @@ def build_outputs(rows_all):
                     if subj == title:
                         ws.cell(row=row_index, column=5).font = Font(size=9, bold=True, color='00FF0000')
 
-    data = event_db.load_yesterday()
+    data = event_db.load_compare_baseline()
     ws = wb['Sheet']
     ws.title = '전체'
     excel_cont(rows_all, ws)
 
     rows_all = rows_all.copy()
+    rows_all['증권사'] = rows_all['증권사'].astype(str).str.strip()
+    rows_all['제목'] = rows_all['제목'].astype(str).str.strip()
     rows_all['key'] = rows_all['증권사'] + '[]' + rows_all['제목']
     data['key'] = data['증권사'] + '[]' + data['제목'].astype(str)
 
     new = sorted(set(rows_all['key']) - set(data['key']))
+    matched = len(set(rows_all['key']) & set(data['key']))
+    print(f'[비교] 전체 시트 - 기존 {matched}건 / 신규 {len(new)}건 (빨간색)')
     if new:
         for key in new:
             corp_name, subj = key.split('[]', 1)
