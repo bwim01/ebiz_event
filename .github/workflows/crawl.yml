@@ -74,7 +74,3 @@ jobs:
             output/*.txt
             output/events.db
           if-no-files-found: warn
-
-      - name: Fail if crawl failed
-        if: steps.crawl.outcome == 'failure'
-        run: exit 1

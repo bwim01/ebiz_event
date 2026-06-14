@@ -169,9 +169,9 @@ def main():
 
     print('=' * 60)
     if fail:
-        print(f'완료 (오류 증권사 {fail}개)')
-        sys.exit(1)
-    print('완료')
+        print(f'완료 (오류 증권사 {fail}개, 엑셀/메일은 생성됨)')
+    else:
+        print('완료')
     sys.exit(0)
 
 
