@@ -34,8 +34,7 @@ jobs:
         run: |
           mkdir -p output
           cp data/events.db output/events.db
-          python seed_db.py data/baseline.xlsx --as-yesterday
-          python -c "import event_db; d=event_db.load_compare_baseline(); print('compare baseline rows:', len(d))"
+          python -c "import event_db; d=event_db.load_compare_baseline(); print('compare baseline rows:', len(d)); assert len(d)==94, 'baseline load failed'"
 
       - name: Run crawl
         id: crawl
@@ -68,7 +67,7 @@ jobs:
           username: cslewis04@gmail.com
           password: ${{ secrets.GMAIL_APP_PASSWORD }}
           subject: 경쟁사 이벤트 크롤링 ${{ github.run_number }}
-          to: 112247@koreainvestment.com
+          to: 112247@koreainvestment.com, cslewis04@gmail.com
           from: cslewis04@gmail.com
           body: file:///tmp/mail_body.txt
           attachments: ${{ steps.attach.outputs.list }}

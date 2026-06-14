@@ -8,7 +8,7 @@ import pandas as pd
 from config import COLUMNS, EXCEL_PREFIX, OUTPUT_DIR, ROOT
 
 DB_PATH = OUTPUT_DIR / 'events.db'
-BASELINE_XLSX = ROOT / 'data' / '경쟁사 이벤트_20260609.xlsx'
+BASELINE_XLSX = ROOT / 'data' / 'baseline.xlsx'
 KST = ZoneInfo('Asia/Seoul')
 
 _CREATE_SQL = """
@@ -140,12 +140,9 @@ def load_yesterday():
 
 
 def load_compare_baseline():
-    """비교용 기준 데이터. load_yesterday 결과가 비면 baseline 강제 로드."""
-    df = load_yesterday()
-    if not df.empty:
-        return df
+    """비교용 기준 = 원본 baseline.xlsx (0609, 94건) 고정."""
     df = _load_baseline_xlsx()
-    print(f'[DB] 비교 기준 강제: baseline xlsx / {len(df)}건')
+    print(f'[DB] 비교 기준: 원본 baseline / {len(df)}건')
     return _normalize_df(df)
 
 
