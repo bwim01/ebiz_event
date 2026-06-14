@@ -1,11 +1,17 @@
 # -*- coding: utf-8 -*-
 """GitHub Actions 메일 본문·첨부 경로 준비"""
+from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from config import ALERT_PREFIX, EXCEL_PREFIX, OUTPUT_DIR
 
-out = OUTPUT_DIR
-xlsxs = sorted(out.glob(f'{EXCEL_PREFIX}*.xlsx'))
+KST = ZoneInfo('Asia/Seoul')
+now = datetime.now(KST)
+subject = f'[경쟁사 이벤트 RPA] {now.month:02d}월 {now.day:02d}일 기준'
+Path('/tmp/mail_subject.txt').write_text(subject, encoding='utf-8')
+
+out = OUTPUT_DIRxlsxs = sorted(out.glob(f'{EXCEL_PREFIX}*.xlsx'))
 txts = sorted(out.glob(f'{ALERT_PREFIX}*.txt'))
 
 lines = ['경쟁사 이벤트 크롤링 결과', '']
@@ -27,5 +33,6 @@ if txts:
 
 out_attach = Path('/tmp/mail_attachments.txt')
 out_attach.write_text('\n'.join(attachments), encoding='utf-8')
+print('subject:', subject)
 print('body:', '/tmp/mail_body.txt')
 print('attachments:', attachments or '(none)')

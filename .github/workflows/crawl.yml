@@ -58,6 +58,14 @@ jobs:
             echo "EOF" >> $GITHUB_OUTPUT
           fi
 
+      - name: Set email subject
+        if: always()
+        id: mailsub
+        run: |
+          echo "subject<<EOF" >> $GITHUB_OUTPUT
+          cat /tmp/mail_subject.txt >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
       - name: Send email (Gmail)
         if: always()
         continue-on-error: true
@@ -67,7 +75,7 @@ jobs:
           server_port: 587
           username: cslewis04@gmail.com
           password: ${{ secrets.GMAIL_APP_PASSWORD }}
-          subject: 경쟁사 이벤트 크롤링 ${{ github.run_number }}
+          subject: ${{ steps.mailsub.outputs.subject }}
           to: 111715@koreainvestment.com, 112247@koreainvestment.com
           from: cslewis04@gmail.com
           body: file:///tmp/mail_body.txt

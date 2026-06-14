@@ -168,8 +168,9 @@ def build_outputs(rows_all):
         result = []
         for key in new:
             temp = '- ' + key.replace('[]', ' / ').replace('"', '') + '\n'
-            if key not in 'NH투자증권':
-                temp = temp + ' ' + rows_all[rows_all['key'] == key]['url'].values[0] + '\n'
+            url_vals = rows_all[rows_all['key'] == key]['url'].values
+            if len(url_vals) and str(url_vals[0]).strip():
+                temp = temp + ' ' + str(url_vals[0]).strip() + '\n'
             result.append(temp)
 
         alert_path = OUTPUT_DIR / f'{ALERT_PREFIX}{today}.txt'

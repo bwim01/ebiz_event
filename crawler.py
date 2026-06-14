@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import html
 import re
 import warnings
 from datetime import datetime
@@ -340,33 +341,29 @@ def crawl_all(page, context=None, skip_samsung=False):
         stats[name] = '오류'
         errors[name] = str(e)
 
-    # 신한
+    # 신한 (API로 수집 → url 포함)
     name = '신한투자증권'
     try:
-        page.goto('https://www.shinhansec.com/siw/customer-center/event/giEvent1/view.do', wait_until='networkidle', timeout=90000)
-        page.wait_for_timeout(3000)
-        date_re = re.compile(r'(\d{4})\.\s*(\d{1,2})\.\s*(\d{1,2})\s*~\s*(\d{4})\.\s*(\d{1,2})\.\s*(\d{1,2})')
-        for _ in range(20):
-            btns = page.locator('a:has-text("더보기")')
-            if btns.count() == 0:
-                break
-            btns.first.click(timeout=10000)
-            page.wait_for_timeout(1500)
-        idx = 0
-        event_items = [el for el in page.locator('ul.list > li').all()
-                       if date_re.search(el.inner_text())]
-        for item in event_items:
-            text = item.inner_text().strip()
-            m = date_re.search(text)
-            if not m:
-                continue
-            lines = [x.strip() for x in text.split('\n') if x.strip()]
-            cont = next((ln for ln in lines[1:] if not date_re.search(ln) and ln != '자세히 보기' and '신한투자증권' not in ln), '')
-            idx += 1
-            rows.append({'증권사': name, '번호': idx, '구분': '', 'url': '', '제목': lines[0], '내용': cont,
-                         '시작일': f"{m.group(1)}/{int(m.group(2)):02d}/{int(m.group(3)):02d}",
-                         '종료일': f"{m.group(4)}/{int(m.group(5)):02d}/{int(m.group(6)):02d}"})
-        stats[name] = idx
+        resp = requests.get(
+            'https://bbs2.shinhansec.com/bbs/list/giEvent.do',
+            params={'curPage': 1, 'startPage': 1, 'searchText': '7A==', 'searchType': 'VARIABL'},
+            headers=HEADERS,
+            timeout=30,
+            verify=False,
+        )
+        resp.raise_for_status()
+        items = resp.json().get('list', [])
+        for i, item in enumerate(items, start=1):
+            title = (item.get('f1') or '').strip()
+            url = (item.get('f9') or item.get('f2') or '').strip()
+            cont = html.unescape(re.sub(r'<[^>]+>', '', item.get('f12') or '')).strip()
+            start = (item.get('f6') or '').replace('-', '/')
+            end = (item.get('f7') or '').replace('-', '/')
+            rows.append({
+                '증권사': name, '번호': i, '구분': (item.get('f5') or '').strip(),
+                'url': url, '제목': title, '내용': cont, '시작일': start, '종료일': end,
+            })
+        stats[name] = len(items)
     except Exception as e:
         stats[name] = '오류'
         errors[name] = str(e)
