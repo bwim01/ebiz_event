@@ -164,8 +164,15 @@ def main():
     print(f'output: {OUTPUT_DIR}')
     print('=' * 60)
 
-    rows_all, fail = run_crawl()
-    build_outputs(rows_all)
+    fail = 0
+    try:
+        rows_all, fail = run_crawl()
+        build_outputs(rows_all)
+    except Exception as e:
+        import traceback
+        print(f'[오류] {e}')
+        traceback.print_exc()
+        sys.exit(1)
 
     print('=' * 60)
     if fail:

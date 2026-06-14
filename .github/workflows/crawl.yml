@@ -28,7 +28,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
-          playwright install chromium
+          playwright install --with-deps chromium
 
       - name: Run crawl
         id: crawl
@@ -52,6 +52,7 @@ jobs:
 
       - name: Send email (Gmail)
         if: always()
+        continue-on-error: true
         uses: dawidd6/action-send-mail@v3
         with:
           server_address: smtp.gmail.com
