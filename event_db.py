@@ -4,9 +4,10 @@ from datetime import datetime, timedelta
 
 import pandas as pd
 
-from config import COLUMNS, EXCEL_PREFIX, OUTPUT_DIR
+from config import COLUMNS, EXCEL_PREFIX, OUTPUT_DIR, ROOT
 
 DB_PATH = OUTPUT_DIR / 'events.db'
+BASELINE_XLSX = ROOT / 'data' / '경쟁사 이벤트_20260609.xlsx'
 
 _CREATE_SQL = """
 CREATE TABLE IF NOT EXISTS events (
@@ -62,13 +63,26 @@ def _load_xlsx_fallback(crawl_date):
         return _empty_df()
 
 
+def _load_baseline_xlsx():
+    if not BASELINE_XLSX.exists():
+        return _empty_df()
+    try:
+        return pd.read_excel(BASELINE_XLSX, sheet_name='전체', engine='openpyxl')
+    except Exception:
+        return _empty_df()
+
+
 def load_yesterday():
+    """전일 DB → 전일 xlsx → data/경쟁사 이벤트_20260609.xlsx 순으로 비교 기준 로드."""
     yesterday = (datetime.today() + timedelta(-1)).strftime('%Y%m%d')
     df = _load_from_db(yesterday)
-    if df.empty:
-        df = _load_xlsx_fallback(yesterday)
-        if not df.empty:
-            save_snapshot(yesterday, df)
+    if not df.empty:
+        return _normalize_df(df)
+    df = _load_xlsx_fallback(yesterday)
+    if not df.empty:
+        save_snapshot(yesterday, df)
+        return _normalize_df(df)
+    df = _load_baseline_xlsx()
     return _normalize_df(df)
 
 
