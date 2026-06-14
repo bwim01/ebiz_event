@@ -72,7 +72,7 @@ def run_crawl():
         context.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined});")
         page = context.new_page()
         try:
-            rows, namu, stats, errors = crawl_all(page)
+            rows, namu, stats, errors = crawl_all(page, context)
         finally:
             browser.close()
 

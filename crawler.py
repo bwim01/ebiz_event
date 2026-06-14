@@ -12,7 +12,76 @@ from config import COLUMNS, HEADERS
 
 warnings.filterwarnings('ignore')
 
-def crawl_all(page):
+INIT_SCRIPT = "Object.defineProperty(navigator, 'webdriver', {get: () => undefined});"
+
+
+def _crawl_samsung(context, rows, stats, errors):
+    """삼성은 별도 탭에서 수집 (GitHub runner에서 페이지 상태 꼬임 방지)."""
+    name = '삼성증권'
+    page = context.new_page()
+    samsung_err = None
+    try:
+        for attempt in range(3):
+            try:
+                page.goto('https://www.samsungpop.com/', wait_until='domcontentloaded', timeout=90000)
+                page.wait_for_timeout(5000)
+                frame = None
+                for _ in range(30):
+                    frame = page.frame(name='content')
+                    if frame is not None:
+                        break
+                    page.wait_for_timeout(500)
+                if frame is None:
+                    raise RuntimeError('content frame not found')
+                frame.locator('#nav div:nth-child(1) div:nth-child(2) ul li:nth-child(7) a').first.click(timeout=30000)
+                page.wait_for_timeout(2500)
+                clicked = False
+                for sel in [
+                    '#dl_megamenu_M1231757747515 dd:nth-child(3) a',
+                    'a:has-text("진행중인 이벤트")',
+                ]:
+                    loc = frame.locator(sel).first
+                    if loc.count():
+                        loc.click(timeout=15000)
+                        clicked = True
+                        break
+                if not clicked:
+                    raise RuntimeError('삼성 이벤트 메뉴 클릭 실패')
+                page.wait_for_timeout(5000)
+                frame = page.frame(name='content')
+                if frame is None:
+                    raise RuntimeError('content frame lost after menu click')
+                frame.wait_for_selector('#bodyList1 li', timeout=60000)
+                table = frame.locator('#bodyList1').inner_text().split('자세히보기')
+                num = len(table) - 1
+                if num <= 0:
+                    raise RuntimeError('삼성 이벤트 0건')
+                for i in range(num):
+                    value = [x for x in table[i].split('\n') if x]
+                    if value[-1].startswith('종료') or value[-1].startswith('오늘'):
+                        value.pop()
+                    subj = value[0]
+                    cont = value[1] if len(value) == 3 else ''
+                    date = value[-1].replace('-', '/').replace(' ', '').split('~')
+                    juso = frame.locator(f'#bodyList1 li:nth-child({i + 1}) a').first.get_attribute('href')
+                    juso = (juso or '').replace('javascript:goIngView(', '').replace("'", '').replace(');', '')
+                    href = f'https://www.samsungpop.com/customer/guide.do?cmd=event_view&menuNo=01010900&MenuSeqNo={juso}'
+                    rows.append({'증권사': name, '번호': i + 1, '구분': '', 'url': href, '제목': subj, '내용': cont,
+                                 '시작일': date[0], '종료일': date[1]})
+                stats[name] = num
+                print(f'[삼성] {num}건 수집')
+                return
+            except Exception as e:
+                samsung_err = e
+                print(f'[삼성] 재시도 {attempt + 1}/3: {e}')
+                page.wait_for_timeout(3000)
+        stats[name] = '오류'
+        errors[name] = str(samsung_err)
+    finally:
+        page.close()
+
+
+def crawl_all(page, context=None):
     rows = []
     namu = pd.DataFrame(columns=COLUMNS)
     stats = {}
@@ -153,55 +222,11 @@ def crawl_all(page):
         stats[name] = '오류'
         errors[name] = str(e)
 
-    # 삼성 (content frame → 메뉴 클릭, 3회 재시도)
-    name = '삼성증권'
-    samsung_err = None
-    for attempt in range(3):
-        try:
-            page.goto('https://www.samsungpop.com/', wait_until='domcontentloaded', timeout=90000)
-            page.wait_for_timeout(3000)
-            frame = None
-            for _ in range(20):
-                frame = page.frame(name='content')
-                if frame is not None:
-                    break
-                page.wait_for_timeout(500)
-            if frame is None:
-                raise RuntimeError('content frame not found')
-            frame.locator('#nav div:nth-child(1) div:nth-child(2) ul li:nth-child(7) a').first.click(timeout=30000)
-            page.wait_for_timeout(2500)
-            frame.locator('#dl_megamenu_M1231757747515 dd:nth-child(3) a').first.click(timeout=30000)
-            page.wait_for_timeout(5000)
-            frame = page.frame(name='content')
-            if frame is None:
-                raise RuntimeError('content frame lost after menu click')
-            frame.wait_for_selector('#bodyList1 li', timeout=60000)
-            table = frame.locator('#bodyList1').inner_text().split('자세히보기')
-            num = len(table) - 1
-            if num <= 0:
-                raise RuntimeError('삼성 이벤트 0건')
-            for i in range(num):
-                value = [x for x in table[i].split('\n') if x]
-                if value[-1].startswith('종료') or value[-1].startswith('오늘'):
-                    value.pop()
-                subj = value[0]
-                cont = value[1] if len(value) == 3 else ''
-                date = value[-1].replace('-', '/').replace(' ', '').split('~')
-                juso = frame.locator(f'#bodyList1 li:nth-child({i + 1}) a').first.get_attribute('href')
-                juso = (juso or '').replace('javascript:goIngView(', '').replace("'", '').replace(');', '')
-                href = f'https://www.samsungpop.com/customer/guide.do?cmd=event_view&menuNo=01010900&MenuSeqNo={juso}'
-                rows.append({'증권사': name, '번호': i + 1, '구분': '', 'url': href, '제목': subj, '내용': cont,
-                             '시작일': date[0], '종료일': date[1]})
-            stats[name] = num
-            samsung_err = None
-            break
-        except Exception as e:
-            samsung_err = e
-            print(f'[삼성] 재시도 {attempt + 1}/3: {e}')
-            page.wait_for_timeout(3000)
-    if samsung_err is not None:
-        stats[name] = '오류'
-        errors[name] = str(samsung_err)
+    # 삼성 (별도 탭)
+    if context is not None:
+        _crawl_samsung(context, rows, stats, errors)
+    else:
+        _crawl_samsung(page.context, rows, stats, errors)
 
     # 키움
     name = '키움증권'
