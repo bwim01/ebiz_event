@@ -12,7 +12,7 @@ from playwright.sync_api import sync_playwright
 
 import event_db
 from config import ALERT_PREFIX, CORP, COLUMNS, EXCEL_PREFIX, OUTPUT_DIR
-from crawler import crawl_all
+from crawler import INIT_SCRIPT, crawl_all, _crawl_samsung
 
 warnings.filterwarnings('ignore')
 
@@ -59,6 +59,24 @@ def excel_cont(rows_df, ws):
 def run_crawl():
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     print('[crawl] Playwright 시작...')
+
+    samsung_rows, samsung_stats, samsung_errors = [], {}, {}
+    with sync_playwright() as p:
+        browser = p.chromium.launch(
+            headless=True,
+            args=['--disable-blink-features=AutomationControlled'],
+        )
+        sctx = browser.new_context(
+            user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            viewport={'width': 1400, 'height': 900},
+            locale='ko-KR',
+            timezone_id='Asia/Seoul',
+        )
+        sctx.add_init_script(INIT_SCRIPT)
+        print('[crawl] 삼성 전용 브라우저 수집...')
+        _crawl_samsung(sctx, samsung_rows, samsung_stats, samsung_errors)
+        browser.close()
+
     with sync_playwright() as p:
         browser = p.chromium.launch(
             headless=True,
@@ -68,13 +86,18 @@ def run_crawl():
             user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             viewport={'width': 1400, 'height': 900},
             locale='ko-KR',
+            timezone_id='Asia/Seoul',
         )
-        context.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined});")
+        context.add_init_script(INIT_SCRIPT)
         page = context.new_page()
         try:
-            rows, namu, stats, errors = crawl_all(page, context)
+            rows, namu, stats, errors = crawl_all(page, context, skip_samsung=True)
         finally:
             browser.close()
+
+    rows.extend(samsung_rows)
+    stats.update(samsung_stats)
+    errors.update(samsung_errors)
 
     rows_df = pd.DataFrame(rows, columns=COLUMNS)
     if not namu.empty:
