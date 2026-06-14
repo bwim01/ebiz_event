@@ -100,6 +100,36 @@ def _crawl_samsung(context, rows, stats, errors):
         page.close()
 
 
+def _parse_kb_date(text):
+    text = (text or '').replace('기간', '').replace(' ', '').strip()
+    if '~' in text:
+        start, end = text.split('~', 1)
+        return start.strip(), end.strip()
+    return text, ''
+
+
+def _parse_kb_html(soup, start_no=1):
+    name = 'KB증권'
+    rows = []
+    table = soup.find('ul', attrs={'class': 'eventList'})
+    if not table:
+        return rows
+    items = table.find_all('dl', attrs={'class': 'item'})
+    subjs = table.find_all('a', attrs={'class': 'subj'})
+    dates = table.find_all('dd', attrs={'class': 'date'})
+    for i, subj_el in enumerate(subjs):
+        gubun_parts = items[i].get_text().replace('\n', '').split('\xa0') if i < len(items) else ['']
+        start, end = _parse_kb_date(dates[i].get_text() if i < len(dates) else '')
+        href = subj_el.get('href', '')
+        if href and not href.startswith('http'):
+            href = 'https://www.kbsec.com' + href
+        rows.append({
+            '증권사': name, '번호': start_no + i, '구분': gubun_parts[0], 'url': href,
+            '제목': subj_el.get_text(), '내용': '', '시작일': start, '종료일': end,
+        })
+    return rows
+
+
 def crawl_all(page, context=None, skip_samsung=False):
     rows = []
     namu = pd.DataFrame(columns=COLUMNS)
@@ -110,34 +140,31 @@ def crawl_all(page, context=None, skip_samsung=False):
     name = 'KB증권'
     try:
         url = 'https://www.kbsec.com/go.able?linkcd=m06090002'
-        soup = BeautifulSoup(requests.get(url, headers=HEADERS, verify=False, timeout=20).content, 'html.parser')
-        table = soup.find('ul', attrs={'class': 'eventList'})
-        base_count = 0
-        if table:
-            num = len(table.find_all('a', attrs={'class': 'subj'}))
-            base_count = num
-            for i in range(num):
-                gubun = table.find_all('dl', attrs={'class': 'item'})[i].get_text().replace('\n', '').split('\xa0')
-                subj = table.find_all('a', attrs={'class': 'subj'})[i].get_text()
-                date = table.find_all('dd', attrs={'class': 'date'})[i].get_text().replace('기간', '').replace(' ', '').split('~')
-                href = 'https://www.kbsec.com' + table.find_all('a', attrs={'class': 'subj'})[i]['href']
-                rows.append({'증권사': name, '번호': i + 1, '구분': gubun[0], 'url': href, '제목': subj,
-                             '내용': '', '시작일': date[0], '종료일': date[1]})
-        page.goto(url, wait_until='networkidle', timeout=90000)
-        etf_tab = page.locator('xpath=//*[@id="container"]/form/div[2]/a/img')
-        etf_tab.first.wait_for(state='visible', timeout=20000)
-        etf_tab.first.click(timeout=20000)
-        page.wait_for_selector('xpath=//*[@id="container"]/form/div[3]/ul', timeout=20000)
-        table_txt = page.locator('xpath=//*[@id="container"]/form/div[3]/ul').first.inner_text().split('\n')
-        num = int(len(table_txt) / 3)
-        for k in range(num):
-            gubun = table_txt[3 * k]
-            subj = table_txt[3 * k + 1]
-            date = table_txt[3 * k + 2].replace('기간', '').replace(' ', '').split('~')
-            href = page.locator(f'xpath=//*[@id="container"]/form/div[3]/ul/li[{k + 1}]/dl/dt/a').first.get_attribute('href')
-            rows.append({'증권사': name, '번호': base_count + k + 1, '구분': gubun, 'url': href, '제목': subj,
-                         '내용': '', '시작일': date[0], '종료일': date[1]})
-        stats[name] = len([r for r in rows if r['증권사'] == name])
+        kb_rows = []
+        try:
+            soup = BeautifulSoup(requests.get(url, headers=HEADERS, verify=False, timeout=20).content, 'html.parser')
+            kb_rows = _parse_kb_html(soup)
+        except Exception as e:
+            print(f'[KB] requests 실패: {e}')
+
+        page.goto(url, wait_until='domcontentloaded', timeout=90000)
+        page.wait_for_timeout(2000)
+        if not kb_rows:
+            kb_rows = _parse_kb_html(BeautifulSoup(page.content(), 'html.parser'))
+
+        try:
+            etf_tab = page.locator('xpath=//*[@id="container"]/form/div[2]/a/img')
+            if etf_tab.count():
+                etf_tab.first.click(timeout=20000)
+                page.wait_for_timeout(5000)
+                etf_rows = _parse_kb_html(BeautifulSoup(page.content(), 'html.parser'), start_no=len(kb_rows) + 1)
+                seen = {r['제목'] for r in kb_rows}
+                kb_rows.extend([r for r in etf_rows if r['제목'] not in seen])
+        except Exception as e:
+            print(f'[KB] ETF 스킵: {e}')
+
+        rows.extend(kb_rows)
+        stats[name] = len(kb_rows)
     except Exception as e:
         stats[name] = '오류'
         errors[name] = str(e)
