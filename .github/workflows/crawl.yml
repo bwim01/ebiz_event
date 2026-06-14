@@ -37,6 +37,7 @@ jobs:
 
       - name: Prepare email
         if: always()
+        continue-on-error: true
         run: python prepare_email.py
 
       - name: Set attachment list

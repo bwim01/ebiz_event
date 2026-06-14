@@ -165,14 +165,21 @@ def main():
     print('=' * 60)
 
     fail = 0
+    rows_all = pd.DataFrame(columns=COLUMNS)
     try:
         rows_all, fail = run_crawl()
+    except Exception as e:
+        import traceback
+        print(f'[크롤 오류] {e}')
+        traceback.print_exc()
+        fail = max(fail, 1)
+
+    try:
         build_outputs(rows_all)
     except Exception as e:
         import traceback
-        print(f'[오류] {e}')
+        print(f'[출력 오류] {e}')
         traceback.print_exc()
-        sys.exit(1)
 
     print('=' * 60)
     if fail:
