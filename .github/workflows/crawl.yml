@@ -60,16 +60,11 @@ jobs:
 
       - name: Set email subject
         if: always()
-        continue-on-error: true
         id: mailsub
         run: |
-          if [ -f /tmp/mail_subject.txt ]; then
-            echo "subject<<EOF" >> $GITHUB_OUTPUT
-            cat /tmp/mail_subject.txt >> $GITHUB_OUTPUT
-            echo "EOF" >> $GITHUB_OUTPUT
-          else
-            echo "subject=[경쟁사 이벤트 RPA] 기준" >> $GITHUB_OUTPUT
-          fi
+          SUBJECT=$(python -c "from datetime import datetime; from zoneinfo import ZoneInfo; n=datetime.now(ZoneInfo('Asia/Seoul')); print(f'[경쟁사 이벤트 RPA] {n.month:02d}월 {n.day:02d}일 기준', end='')")
+          echo "subject=$SUBJECT" >> "$GITHUB_OUTPUT"
+          echo "mail subject: $SUBJECT"
 
       - name: Send email (Gmail)
         if: always()
@@ -80,7 +75,7 @@ jobs:
           server_port: 587
           username: cslewis04@gmail.com
           password: ${{ secrets.GMAIL_APP_PASSWORD }}
-          subject: ${{ steps.mailsub.outputs.subject }}
+          subject: ${{ steps.mailsub.outputs.subject || '[경쟁사 이벤트 RPA] 기준' }}
           to: 111715@koreainvestment.com, 112247@koreainvestment.com
           from: cslewis04@gmail.com
           body: file:///tmp/mail_body.txt
