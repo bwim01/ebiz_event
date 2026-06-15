@@ -11,7 +11,8 @@ now = datetime.now(KST)
 subject = f'[경쟁사 이벤트 RPA] {now.month:02d}월 {now.day:02d}일 기준'
 Path('/tmp/mail_subject.txt').write_text(subject, encoding='utf-8')
 
-out = OUTPUT_DIRxlsxs = sorted(out.glob(f'{EXCEL_PREFIX}*.xlsx'))
+out = OUTPUT_DIR
+xlsxs = sorted(out.glob(f'{EXCEL_PREFIX}*.xlsx'))
 txts = sorted(out.glob(f'{ALERT_PREFIX}*.txt'))
 
 lines = ['경쟁사 이벤트 크롤링 결과', '']

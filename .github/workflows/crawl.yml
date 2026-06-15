@@ -60,11 +60,16 @@ jobs:
 
       - name: Set email subject
         if: always()
+        continue-on-error: true
         id: mailsub
         run: |
-          echo "subject<<EOF" >> $GITHUB_OUTPUT
-          cat /tmp/mail_subject.txt >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          if [ -f /tmp/mail_subject.txt ]; then
+            echo "subject<<EOF" >> $GITHUB_OUTPUT
+            cat /tmp/mail_subject.txt >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          else
+            echo "subject=[경쟁사 이벤트 RPA] 기준" >> $GITHUB_OUTPUT
+          fi
 
       - name: Send email (Gmail)
         if: always()
