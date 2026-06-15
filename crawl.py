@@ -105,6 +105,7 @@ def run_crawl():
     else:
         rows_all = rows_df.copy()
     rows_all['제목'] = rows_all['제목'].apply(buho)
+    rows_all = rows_all.drop_duplicates(subset=['증권사', '제목'], keep='first').reset_index(drop=True)
 
     print('[증권사별 수집]')
     fail = 0

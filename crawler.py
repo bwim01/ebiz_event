@@ -198,42 +198,60 @@ def crawl_all(page, context=None, skip_samsung=False):
 
         def format_date(date_str):
             try:
-                return datetime.strptime(date_str, '%Y.%m.%d').strftime('%Y/%m/%d')
+                return datetime.strptime(date_str.strip(), '%Y.%m.%d').strftime('%Y/%m/%d')
             except ValueError:
                 return '날짜 없음'
 
+        def parse_period(period_raw):
+            period = re.sub(r'^이벤트기간\s*:\s*', '', (period_raw or '').strip())
+            if ' ~ ' in period:
+                start_raw, end_raw = period.split(' ~ ', 1)
+                return format_date(start_raw), format_date(end_raw)
+            if period:
+                return format_date(period), '날짜 없음'
+            return '', ''
+
+        def namu_event_lis():
+            out = []
+            for li in page.locator('#ulList1 > li').all():
+                if li.locator('p.tit').count():
+                    out.append(li)
+            return out
+
+        def parse_namu_li(li):
+            title = li.locator('p.tit').first.inner_text().strip()
+            if not title:
+                img = li.locator('img[alt]').first
+                if img.count():
+                    title = (img.get_attribute('alt') or '').strip()
+            period_raw = ''
+            period_el = li.locator('ul.event_txt li').first
+            if period_el.count():
+                period_raw = period_el.inner_text().strip()
+            start_date, end_date = parse_period(period_raw)
+            return title, start_date, end_date
+
         page.goto(list_url, wait_until='domcontentloaded', timeout=60000)
         page.wait_for_selector('#ulList1', timeout=15000)
-        lines = page.locator('#ulList1').inner_text().split('\n')
-        events, links = [], []
-        for i in range(0, len(lines) - 1, 2):
-            title = lines[i].strip()
-            period = lines[i + 1].replace('이벤트기간 : ', '').strip()
-            if ' ~ ' in period:
-                start_date, end_date = period.split(' ~ ')
-                start_date, end_date = format_date(start_date), format_date(end_date)
-            else:
-                start_date, end_date = format_date(period), '날짜 없음'
-            events.append([title, start_date, end_date])
-        idx = 1
-        while True:
-            xpath = f'xpath=//*[@id="ulList1"]/li[{idx}]/a'
+        events = [parse_namu_li(li) for li in namu_event_lis()]
+        events = [(t, s, e) for t, s, e in events if t and t != '더보기']
+
+        links = []
+        for idx in range(len(events)):
+            page.goto(list_url, wait_until='domcontentloaded', timeout=60000)
+            page.wait_for_selector('#ulList1', timeout=15000)
+            event_lis = namu_event_lis()
+            if idx >= len(event_lis):
+                links.append('')
+                continue
             try:
-                link = page.locator(xpath)
-                link.wait_for(state='attached', timeout=5000)
-                text = link.inner_text().strip()
-                if text == '더보기':
-                    break
-                link.click(timeout=10000)
+                event_lis[idx].locator('a.click_area').first.click(timeout=10000)
                 page.wait_for_load_state('domcontentloaded', timeout=15000)
                 links.append(page.url)
-                page.goto(list_url, wait_until='domcontentloaded', timeout=60000)
-                page.wait_for_selector('#ulList1', timeout=15000)
-                idx += 1
             except PlaywrightTimeout:
-                break
-        namu = (pd.DataFrame(events, columns=['제목', '시작일', '종료일'])
-                .query("제목 != '더보기'").reset_index(drop=True))
+                links.append('')
+
+        namu = pd.DataFrame(events, columns=['제목', '시작일', '종료일'])
         if len(links) < len(namu):
             links = links + [''] * (len(namu) - len(links))
         else:

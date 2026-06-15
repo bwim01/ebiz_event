@@ -9,21 +9,24 @@
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 
 import event_db
 from config import OUTPUT_DIR
 
+KST = ZoneInfo('Asia/Seoul')
+
 
 def _parse_date(path, argv):
     if '--as-yesterday' in argv:
-        return (datetime.today() + timedelta(-1)).strftime('%Y%m%d')
+        return (datetime.now(KST) + timedelta(-1)).strftime('%Y%m%d')
     if '--date' in argv:
         i = argv.index('--date')
         return argv[i + 1]
     stem = path.stem
-    return stem.split('_')[-1] if '_' in stem else datetime.today().strftime('%Y%m%d')
+    return stem.split('_')[-1] if '_' in stem else datetime.now(KST).strftime('%Y%m%d')
 
 
 def seed(path, crawl_date):
