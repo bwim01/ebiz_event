@@ -231,24 +231,42 @@ def crawl_all(page, context=None, skip_samsung=False):
             start_date, end_date = parse_period(period_raw)
             return title, start_date, end_date
 
-        page.goto(list_url, wait_until='domcontentloaded', timeout=60000)
-        page.wait_for_selector('#ulList1', timeout=15000)
+        def namu_prepare_list():
+            page.goto(list_url, wait_until='domcontentloaded', timeout=60000)
+            page.wait_for_selector('#ulList1', timeout=15000)
+            for _ in range(5):
+                more = page.locator('#ulList1 a.more_btn')
+                if not more.count():
+                    break
+                try:
+                    more.first.evaluate('el => el.click()')
+                    page.wait_for_timeout(1500)
+                except Exception:
+                    break
+
+        def namu_click_event(idx):
+            namu_prepare_list()
+            event_lis = namu_event_lis()
+            if idx >= len(event_lis):
+                return ''
+            anchor = event_lis[idx].locator('a.click_area').first
+            try:
+                anchor.scroll_into_view_if_needed(timeout=10000)
+                anchor.click(timeout=10000)
+            except Exception:
+                anchor.click(force=True, timeout=10000)
+            page.wait_for_load_state('domcontentloaded', timeout=15000)
+            return page.url
+
+        namu_prepare_list()
         events = [parse_namu_li(li) for li in namu_event_lis()]
         events = [(t, s, e) for t, s, e in events if t and t != '더보기']
 
         links = []
         for idx in range(len(events)):
-            page.goto(list_url, wait_until='domcontentloaded', timeout=60000)
-            page.wait_for_selector('#ulList1', timeout=15000)
-            event_lis = namu_event_lis()
-            if idx >= len(event_lis):
-                links.append('')
-                continue
             try:
-                event_lis[idx].locator('a.click_area').first.click(timeout=10000)
-                page.wait_for_load_state('domcontentloaded', timeout=15000)
-                links.append(page.url)
-            except PlaywrightTimeout:
+                links.append(namu_click_event(idx))
+            except Exception:
                 links.append('')
 
         namu = pd.DataFrame(events, columns=['제목', '시작일', '종료일'])
