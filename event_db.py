@@ -114,7 +114,7 @@ def _load_latest_db_before(today):
 
 
 def load_yesterday():
-    """전일(KST) DB → 최근 DB → 전일 xlsx → baseline xlsx 순으로 비교 기준 로드."""
+    """전일(KST) DB → 최근 DB → 전일 xlsx → baseline xlsx(최초 1회) 순으로 비교 기준 로드."""
     today = _today_kst()
     yesterday = _yesterday_kst()
 
@@ -136,13 +136,6 @@ def load_yesterday():
 
     df = _load_baseline_xlsx()
     print(f'[DB] 비교 기준: baseline xlsx / {len(df)}건')
-    return _normalize_df(df)
-
-
-def load_compare_baseline():
-    """비교용 기준 = 원본 baseline.xlsx (0609, 94건) 고정."""
-    df = _load_baseline_xlsx()
-    print(f'[DB] 비교 기준: 원본 baseline / {len(df)}건')
     return _normalize_df(df)
 
 

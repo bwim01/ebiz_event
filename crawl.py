@@ -121,7 +121,7 @@ def run_crawl():
 
 def build_outputs(rows_all):
     today = datetime.now(event_db.KST).strftime('%Y%m%d')
-    data_all = event_db.load_compare_baseline()
+    data_all = event_db.load_yesterday()
     print(f'[비교] 오늘 수집 {len(rows_all)}건 / 기준 {len(data_all)}건')
     if data_all.empty:
         print('[비교] 경고: 기준 데이터 없음 → 전부 신규(빨간색) 처리됨')
@@ -142,7 +142,7 @@ def build_outputs(rows_all):
                     if subj == title:
                         ws.cell(row=row_index, column=5).font = Font(size=9, bold=True, color='00FF0000')
 
-    data = event_db.load_compare_baseline()
+    data = event_db.load_yesterday()
     ws = wb['Sheet']
     ws.title = '전체'
     excel_cont(rows_all, ws)

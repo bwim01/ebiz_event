@@ -31,11 +31,13 @@ jobs:
           pip install -r requirements.txt
           playwright install --with-deps chromium
 
-      - name: Seed baseline DB
+      - name: Init output DB
         run: |
           mkdir -p output
-          cp data/events.db output/events.db
-          python -c "import event_db; d=event_db.load_compare_baseline(); print('compare baseline rows:', len(d)); assert len(d)==94, 'baseline load failed'"
+          if [ ! -f output/events.db ]; then
+            cp data/events.db output/events.db
+            echo "events.db initialized from seed (first run only)"
+          fi
 
       - name: Run crawl
         id: crawl
