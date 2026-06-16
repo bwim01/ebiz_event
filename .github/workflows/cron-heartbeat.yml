@@ -1,0 +1,15 @@
+name: cron-heartbeat
+
+on:
+  schedule:
+    - cron: '0 22 * * 0-4'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Cron alive check
+        run: |
+          echo "schedule fired at $(date -u) UTC"
+          echo "KST=$(TZ=Asia/Seoul date)"

@@ -1,0 +1,14 @@
+name: event-crawl-schedule
+
+on:
+  schedule:
+    # UTC 22:00 = KST 07:00 (월~금)
+    - cron: '0 22 * * 0-4'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    uses: ./.github/workflows/_crawl-jobs.yml

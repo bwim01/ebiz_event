@@ -1,94 +1,10 @@
 name: event-crawl
 
 on:
-  schedule:
-    # UTC 22:00 = KST 07:00 (월~금)
-    - cron: '0 22 * * 0-4'
   workflow_dispatch:
+  repository_dispatch:
+    types: [crawl]
 
 jobs:
-  crawl:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/cache@v4
-        with:
-          path: output
-          key: events-output-${{ github.run_id }}
-          restore-keys: |
-            events-output-
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Install dependencies
-        run: |
-          pip install -r requirements.txt
-          playwright install --with-deps chromium
-
-      - name: Init output DB
-        run: |
-          mkdir -p output
-          if [ ! -f output/events.db ]; then
-            cp data/events.db output/events.db
-            echo "events.db initialized from seed (first run only)"
-          fi
-
-      - name: Run crawl
-        id: crawl
-        continue-on-error: true
-        run: python crawl.py
-
-      - name: Prepare email
-        if: always()
-        continue-on-error: true
-        run: python prepare_email.py
-
-      - name: Set attachment list
-        if: always()
-        id: attach
-        run: |
-          if [ -s /tmp/mail_attachments.txt ]; then
-            LIST=$(cat /tmp/mail_attachments.txt)
-            echo "list<<EOF" >> $GITHUB_OUTPUT
-            echo "$LIST" >> $GITHUB_OUTPUT
-            echo "EOF" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Set email subject
-        if: always()
-        id: mailsub
-        run: |
-          SUBJECT=$(python -c "from datetime import datetime; from zoneinfo import ZoneInfo; n=datetime.now(ZoneInfo('Asia/Seoul')); print(f'[경쟁사 이벤트 RPA] {n.month:02d}월 {n.day:02d}일 기준', end='')")
-          echo "subject=$SUBJECT" >> "$GITHUB_OUTPUT"
-          echo "mail subject: $SUBJECT"
-
-      - name: Send email (Gmail)
-        if: always()
-        continue-on-error: true
-        uses: dawidd6/action-send-mail@v3
-        with:
-          server_address: smtp.gmail.com
-          server_port: 587
-          username: cslewis04@gmail.com
-          password: ${{ secrets.GMAIL_APP_PASSWORD }}
-          subject: ${{ steps.mailsub.outputs.subject || '[경쟁사 이벤트 RPA] 기준' }}
-          to: 111715@koreainvestment.com, 112247@koreainvestment.com
-          from: cslewis04@gmail.com
-          body: file:///tmp/mail_body.txt
-          attachments: ${{ steps.attach.outputs.list }}
-
-      - name: Upload artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: events-${{ github.run_number }}
-          path: |
-            output/*.xlsx
-            output/*.txt
-            output/events.db
-          if-no-files-found: warn
+  run:
+    uses: ./.github/workflows/_crawl-jobs.yml
