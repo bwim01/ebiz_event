@@ -1,0 +1,64 @@
+name: resend-mail
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  resend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/cache@v4
+        with:
+          path: output
+          key: events-output-${{ github.run_id }}
+          restore-keys: |
+            events-output-
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Check cached output
+        run: |
+          ls -la output/ || true
+          ls -la output/*.xlsx output/*.txt 2>/dev/null || echo "no xlsx/txt in output"
+
+      - name: Prepare email
+        run: python prepare_email.py
+
+      - name: Set attachment list
+        id: attach
+        run: |
+          if [ -s /tmp/mail_attachments.txt ]; then
+            LIST=$(cat /tmp/mail_attachments.txt)
+            echo "list<<EOF" >> $GITHUB_OUTPUT
+            echo "$LIST" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Set email subject
+        id: mailsub
+        run: |
+          SUBJECT=$(python -c "from datetime import datetime; from zoneinfo import ZoneInfo; n=datetime.now(ZoneInfo('Asia/Seoul')); print(f'[경쟁사 이벤트 RPA] {n.month:02d}월 {n.day:02d}일 기준', end='')")
+          echo "subject=$SUBJECT" >> "$GITHUB_OUTPUT"
+          echo "mail subject: $SUBJECT"
+
+      - name: Send email (Gmail)
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 587
+          username: cslewis04@gmail.com
+          password: ${{ secrets.GMAIL_APP_PASSWORD }}
+          subject: ${{ steps.mailsub.outputs.subject || '[경쟁사 이벤트 RPA] 기준' }}
+          to: 111715@koreainvestment.com, 112247@koreainvestment.com
+          from: cslewis04@gmail.com
+          body: file:///tmp/mail_body.txt
+          attachments: ${{ steps.attach.outputs.list }}
