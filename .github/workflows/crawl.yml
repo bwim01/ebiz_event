@@ -8,3 +8,4 @@ on:
 jobs:
   run:
     uses: ./.github/workflows/_crawl-jobs.yml
+    secrets: inherit
