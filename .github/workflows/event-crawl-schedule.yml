@@ -2,8 +2,8 @@ name: event-crawl-schedule
 
 on:
   schedule:
-    # TEST: UTC 22:17 = KST 07:17
-    - cron: '17 22 * * *'
+    # UTC 21:50 = KST 06:50 (월~금)
+    - cron: '50 21 * * 0-4'
   workflow_dispatch:
 
 permissions:

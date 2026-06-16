@@ -2,7 +2,7 @@ name: cron-heartbeat
 
 on:
   schedule:
-    - cron: '17 22 * * *'
+    - cron: '50 21 * * 0-4'
   workflow_dispatch:
 
 jobs:
