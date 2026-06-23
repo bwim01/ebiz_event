@@ -152,7 +152,7 @@ def _crawl_namu_platform(name, list_api, view_tpl):
         if mno in seen:
             continue
         seen.add(mno)
-        title = (it.get('mTitle') or '').strip()
+        title = re.sub(r'\s+', ' ', it.get('mTitle') or '').strip()
         if not title:
             continue
         link_url = (it.get('mLinkUrl') or '').strip()
