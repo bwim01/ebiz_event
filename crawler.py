@@ -2,7 +2,6 @@
 import html
 import re
 import warnings
-from datetime import datetime
 
 import pandas as pd
 import requests
@@ -130,6 +129,46 @@ def _parse_kb_html(soup, start_no=1):
     return rows
 
 
+_NAMU_HEADERS = {
+    'User-Agent': ('Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) '
+                   'AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1'),
+    'X-Requested-With': 'XMLHttpRequest',
+}
+
+
+def _fmt_dttm(s):
+    s = (s or '').strip()
+    return f'{s[:4]}/{s[4:6]}/{s[6:8]}' if len(s) == 8 and s.isdigit() else ''
+
+
+def _crawl_namu_platform(name, list_api, view_tpl):
+    """나무/NH 공통 이벤트 목록 JSON API 수집(동일 플랫폼). 제목·기간·상세 URL 포함."""
+    resp = requests.get(list_api, headers=_NAMU_HEADERS, params={'pageSize': 100}, timeout=30, verify=False)
+    resp.raise_for_status()
+    content = (resp.json().get('result') or {}).get('content') or []
+    out, seen, idx = [], set(), 0
+    for it in content:
+        mno = it.get('mNo')
+        if mno in seen:
+            continue
+        seen.add(mno)
+        title = (it.get('mTitle') or '').strip()
+        if not title:
+            continue
+        link_url = (it.get('mLinkUrl') or '').strip()
+        if it.get('mExposurePage') == 'Y' and link_url:
+            url = link_url
+        elif mno is not None:
+            url = view_tpl.format(mno)
+        else:
+            url = ''
+        idx += 1
+        out.append({'증권사': name, '번호': idx, '구분': '', 'url': url, '제목': title,
+                    '내용': (it.get('mSummary') or '').strip(),
+                    '시작일': _fmt_dttm(it.get('mStartDttm')), '종료일': _fmt_dttm(it.get('mEndDttm'))})
+    return out
+
+
 def crawl_all(page, context=None, skip_samsung=False):
     rows = []
     namu = pd.DataFrame(columns=COLUMNS)
@@ -169,103 +208,30 @@ def crawl_all(page, context=None, skip_samsung=False):
         stats[name] = '오류'
         errors[name] = str(e)
 
-    # NH
+    # NH (목록 JSON API로 수집 → 제목/기간/URL 모두 확보, 브라우저 불필요)
     name = 'NH투자증권'
     try:
-        page.goto('https://www.nhqv.com/', wait_until='networkidle', timeout=90000)
-        frame = page.frame_locator('#iflg_body')
-        frame.locator('xpath=//*[@id="gnvVID"]/li[6]/a').click(timeout=20000)
-        frame.locator('xpath=//*[@id="menu_524"]').first.click(timeout=20000)
-        frame.locator('xpath=//*[@id="menu_540"]/span').first.click(timeout=20000)
-        frame.locator('xpath=//*[@id="rowCount"]').select_option('30')
-        frame.locator('xpath=//*[@id="contents"]/form/div/div[2]/div/div/a').click(timeout=20000)
-        frame.locator('xpath=//*[@id="contents"]/ul').wait_for(timeout=20000)
-        table = frame.locator('xpath=//*[@id="contents"]/ul').inner_text().split('\n')
-        num = int(len(table) / 4)
-        for i in range(num):
-            date = table[4 * i + 2].replace('이벤트기간 : ', '').replace(' ', '').replace('.', '/').split('~')
-            rows.append({'증권사': name, '번호': i + 1, '구분': '', 'url': '', '제목': table[4 * i],
-                         '내용': table[4 * i + 1], '시작일': date[0], '종료일': date[1]})
-        stats[name] = num
+        nh_rows = _crawl_namu_platform(
+            name,
+            'https://m.nhqv.com/customer/event/eventList.json',
+            'https://m.nhqv.com/customer/event/eventView?mNo={}',
+        )
+        rows.extend(nh_rows)
+        stats[name] = len(nh_rows)
     except Exception as e:
         stats[name] = '오류'
         errors[name] = str(e)
 
-    # 나무
+    # 나무 (목록 JSON API로 수집 → 제목/기간/URL 모두 확보, 브라우저 불필요)
     name = '나무증권'
     try:
-        list_url = 'https://m.mynamuh.com/customer/event/eventList'
-
-        def format_date(date_str):
-            try:
-                return datetime.strptime(date_str.strip(), '%Y.%m.%d').strftime('%Y/%m/%d')
-            except ValueError:
-                return ''
-
-        def parse_period(period_raw):
-            period = re.sub(r'^이벤트기간\s*:\s*', '', (period_raw or '').strip())
-            if ' ~ ' in period:
-                start_raw, end_raw = period.split(' ~ ', 1)
-                return format_date(start_raw), format_date(end_raw)
-            if period:
-                return format_date(period), ''
-            return '', ''
-
-        def is_period_text(text):
-            t = (text or '').strip()
-            return t.startswith('이벤트기간') or bool(re.match(r'^\d{4}\.\d{2}\.\d{2}\s*~', t))
-
-        def namu_event_lis():
-            out = []
-            for li in page.locator('#ulList1 > li').all():
-                if li.locator('p.tit').count():
-                    out.append(li)
-            return out
-
-        def li_title(li):
-            title = li.locator('p.tit').first.inner_text().strip()
-            if not title:
-                img = li.locator('img[alt]').first
-                if img.count():
-                    title = (img.get_attribute('alt') or '').strip()
-            return title
-
-        page.goto(list_url, wait_until='domcontentloaded', timeout=60000)
-        page.wait_for_selector('#ulList1', timeout=15000)
-        for _ in range(5):
-            more = page.locator('#ulList1 a.more_btn')
-            if not more.count():
-                break
-            try:
-                more.first.evaluate('el => el.click()')
-                page.wait_for_timeout(1500)
-            except Exception:
-                break
-
-        # 제목 <li>와 기간 <li>가 분리돼 있어, 기간 문자열은 직전 이벤트에 귀속시키고
-        # '이벤트기간 :...' 같은 가짜 제목 행은 만들지 않는다.
-        collected = []
-        for li in namu_event_lis():
-            title = li_title(li)
-            if not title or title == '더보기':
-                continue
-            if is_period_text(title):
-                start_date, end_date = parse_period(title)
-                if collected:
-                    prev_t, prev_s, prev_e = collected[-1]
-                    collected[-1] = (prev_t, prev_s or start_date, prev_e or end_date)
-                continue
-            period_raw = ''
-            period_el = li.locator('ul.event_txt li').first
-            if period_el.count():
-                period_raw = period_el.inner_text().strip()
-            start_date, end_date = parse_period(period_raw)
-            collected.append((title, start_date, end_date))
-
-        namu = pd.DataFrame(collected, columns=['제목', '시작일', '종료일'])
-        namu = (namu.assign(증권사=name, 번호=lambda x: x.index + 1, 구분='', 내용='', url='')
-                .filter(items=COLUMNS))
-        stats[name] = len(namu)
+        namu_rows = _crawl_namu_platform(
+            name,
+            'https://m.mynamuh.com/customer/event/eventList.json',
+            'https://m.mynamuh.com/customer/event/eventView?mNo={}',
+        )
+        rows.extend(namu_rows)
+        stats[name] = len(namu_rows)
     except Exception as e:
         stats[name] = '오류'
         errors[name] = str(e)
