@@ -2,7 +2,11 @@ on:
   workflow_call:
 
 permissions:
-  contents: read
+  contents: write
+
+concurrency:
+  group: events-db
+  cancel-in-progress: false
 
 jobs:
   crawl:
@@ -11,13 +15,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-
-      - uses: actions/cache@v4
-        with:
-          path: output
-          key: events-output-${{ github.run_id }}
-          restore-keys: |
-            events-output-
 
       - uses: actions/setup-python@v5
         with:
@@ -28,12 +25,14 @@ jobs:
           pip install -r requirements.txt
           playwright install --with-deps chromium
 
-      - name: Init output DB
+      - name: Seed output DB from repo
         run: |
           mkdir -p output
-          if [ ! -f output/events.db ]; then
+          if [ -f data/events.db ]; then
             cp data/events.db output/events.db
-            echo "events.db initialized from seed (first run only)"
+            echo "events.db seeded from repo (data/events.db)"
+          else
+            echo "no committed DB found, starting fresh"
           fi
 
       - name: Run crawl
@@ -90,3 +89,22 @@ jobs:
             output/*.txt
             output/events.db
           if-no-files-found: warn
+
+      - name: Persist DB to repo
+        if: always()
+        run: |
+          if [ ! -f output/events.db ]; then
+            echo "no DB to persist"; exit 0
+          fi
+          mkdir -p data
+          cp output/events.db data/events.db
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/events.db
+          if git diff --cached --quiet; then
+            echo "DB unchanged, nothing to commit"
+          else
+            git commit -m "chore: update events.db snapshot [skip ci]"
+            git pull --rebase --autostash || true
+            git push
+          fi

@@ -136,6 +136,10 @@ def build_outputs(rows_all):
         excel_cont(rows_cor, ws)
 
         new = set(rows_cor['제목']) - set(data['제목'])
+        # 직전 기준에 이 증권사 데이터가 전혀 없으면(직전 크롤 실패 등)
+        # 진행 중인 과거 이벤트가 통째로 신규로 잡히는 폭주를 막는다.
+        if not data_all.empty and data.empty:
+            new = set()
         if new:
             for title in new:
                 for row_index in range(2, ws.max_row + 1):
@@ -155,6 +159,14 @@ def build_outputs(rows_all):
     data['key'] = data['증권사'] + '[]' + data['제목'].astype(str)
 
     new = sorted(set(rows_all['key']) - set(data['key']))
+    # 직전 기준에 아예 없던 증권사는 신규 판단에서 제외(직전 크롤 실패로 인한 폭주 방지).
+    # 기준 자체가 비어있는 최초 실행은 기존 동작(전부 신규) 유지.
+    if not data.empty:
+        baseline_corps = set(data['증권사'].astype(str).str.strip())
+        missing = sorted({k.split('[]', 1)[0] for k in new if k.split('[]', 1)[0] not in baseline_corps})
+        if missing:
+            print(f'[비교] 기준에 없는 증권사 신규 제외(직전 크롤 실패 추정): {", ".join(missing)}')
+        new = [k for k in new if k.split('[]', 1)[0] in baseline_corps]
     matched = len(set(rows_all['key']) & set(data['key']))
     print(f'[비교] 전체 시트 - 기존 {matched}건 / 신규 {len(new)}건 (빨간색)')
     if new:

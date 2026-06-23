@@ -200,7 +200,7 @@ def crawl_all(page, context=None, skip_samsung=False):
             try:
                 return datetime.strptime(date_str.strip(), '%Y.%m.%d').strftime('%Y/%m/%d')
             except ValueError:
-                return '날짜 없음'
+                return ''
 
         def parse_period(period_raw):
             period = re.sub(r'^이벤트기간\s*:\s*', '', (period_raw or '').strip())
@@ -208,8 +208,12 @@ def crawl_all(page, context=None, skip_samsung=False):
                 start_raw, end_raw = period.split(' ~ ', 1)
                 return format_date(start_raw), format_date(end_raw)
             if period:
-                return format_date(period), '날짜 없음'
+                return format_date(period), ''
             return '', ''
+
+        def is_period_text(text):
+            t = (text or '').strip()
+            return t.startswith('이벤트기간') or bool(re.match(r'^\d{4}\.\d{2}\.\d{2}\s*~', t))
 
         def namu_event_lis():
             out = []
@@ -218,63 +222,48 @@ def crawl_all(page, context=None, skip_samsung=False):
                     out.append(li)
             return out
 
-        def parse_namu_li(li):
+        def li_title(li):
             title = li.locator('p.tit').first.inner_text().strip()
             if not title:
                 img = li.locator('img[alt]').first
                 if img.count():
                     title = (img.get_attribute('alt') or '').strip()
+            return title
+
+        page.goto(list_url, wait_until='domcontentloaded', timeout=60000)
+        page.wait_for_selector('#ulList1', timeout=15000)
+        for _ in range(5):
+            more = page.locator('#ulList1 a.more_btn')
+            if not more.count():
+                break
+            try:
+                more.first.evaluate('el => el.click()')
+                page.wait_for_timeout(1500)
+            except Exception:
+                break
+
+        # 제목 <li>와 기간 <li>가 분리돼 있어, 기간 문자열은 직전 이벤트에 귀속시키고
+        # '이벤트기간 :...' 같은 가짜 제목 행은 만들지 않는다.
+        collected = []
+        for li in namu_event_lis():
+            title = li_title(li)
+            if not title or title == '더보기':
+                continue
+            if is_period_text(title):
+                start_date, end_date = parse_period(title)
+                if collected:
+                    prev_t, prev_s, prev_e = collected[-1]
+                    collected[-1] = (prev_t, prev_s or start_date, prev_e or end_date)
+                continue
             period_raw = ''
             period_el = li.locator('ul.event_txt li').first
             if period_el.count():
                 period_raw = period_el.inner_text().strip()
             start_date, end_date = parse_period(period_raw)
-            return title, start_date, end_date
+            collected.append((title, start_date, end_date))
 
-        def namu_prepare_list():
-            page.goto(list_url, wait_until='domcontentloaded', timeout=60000)
-            page.wait_for_selector('#ulList1', timeout=15000)
-            for _ in range(5):
-                more = page.locator('#ulList1 a.more_btn')
-                if not more.count():
-                    break
-                try:
-                    more.first.evaluate('el => el.click()')
-                    page.wait_for_timeout(1500)
-                except Exception:
-                    break
-
-        def namu_click_event(idx):
-            namu_prepare_list()
-            event_lis = namu_event_lis()
-            if idx >= len(event_lis):
-                return ''
-            anchor = event_lis[idx].locator('a.click_area').first
-            try:
-                anchor.scroll_into_view_if_needed(timeout=10000)
-                anchor.click(timeout=10000)
-            except Exception:
-                anchor.click(force=True, timeout=10000)
-            page.wait_for_load_state('domcontentloaded', timeout=15000)
-            return page.url
-
-        namu_prepare_list()
-        events = [parse_namu_li(li) for li in namu_event_lis()]
-        events = [(t, s, e) for t, s, e in events if t and t != '더보기']
-
-        links = []
-        for idx in range(len(events)):
-            try:
-                links.append(namu_click_event(idx))
-            except Exception:
-                links.append('')
-
-        namu = pd.DataFrame(events, columns=['제목', '시작일', '종료일'])
-        if len(links) < len(namu):
-            links = links + [''] * (len(namu) - len(links))
-        else:
-            links = links[:len(namu)]
-        namu = (namu.assign(증권사=name, 번호=lambda x: x.index + 1, 구분='', 내용='', url=links)
+        namu = pd.DataFrame(collected, columns=['제목', '시작일', '종료일'])
+        namu = (namu.assign(증권사=name, 번호=lambda x: x.index + 1, 구분='', 내용='', url='')
                 .filter(items=COLUMNS))
         stats[name] = len(namu)
     except Exception as e:
