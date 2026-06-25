@@ -74,7 +74,7 @@ jobs:
           username: myboy3743@gmail.com
           password: ${{ secrets.GMAIL_APP_PASSWORD }}
           subject: ${{ steps.mailsub.outputs.subject || '[경쟁사 이벤트 RPA] 기준' }}
-          to: 111715@koreainvestment.com, 112247@koreainvestment.com, https://groups.google.com/g/Risk_Aigent
+          to: 111715@koreainvestment.com, 112247@koreainvestment.com, risk_aigent@googlegroups.com
           from: myboy3743@gmail.com
           body: file:///tmp/mail_body.txt
           attachments: ${{ steps.attach.outputs.list }}
